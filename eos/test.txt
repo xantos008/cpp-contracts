@@ -1,0 +1,129 @@
+	void transfer_action(name from, name to, asset quantity, std::string memo) {
+        if (to == _self && memo.size() > 25) {
+            require_auth(from);
+            eosio::check(is_account(to), "to account does not exist");
+            require_recipient(from);
+            require_recipient(to);
+            eosio::check(quantity.is_valid(), "invalid quantity");
+            eosio::check(quantity.amount > 0, "must transfer positive quantity");
+            eosio::check(memo.size() <= 256, "memo has more than 256 bytes");
+
+            std::string delimiter = ",";
+
+            int64_t pos1 = memo.find(delimiter);
+            int64_t pos2 = memo.find(delimiter, pos1 + 1);
+            int64_t pos3 = memo.find(delimiter, pos2 + 1);
+            int64_t pos4 = memo.find(delimiter, pos3 + 1);
+            int64_t pos5 = memo.find(delimiter, pos4 + 1);
+            int64_t pos6 = memo.find(delimiter, pos5 + 1);
+            int64_t pos7 = memo.find(delimiter, pos6 + 1);
+            int64_t pos8 = memo.find(delimiter, pos7 + 1);
+            int64_t pos9 = memo.find(delimiter, pos8 + 1);
+            int64_t pos10 = memo.find(delimiter, pos9 + 1);
+            int64_t pos11 = memo.find(delimiter, pos10 + 1);
+            int64_t pos12 = memo.find(delimiter, pos11 + 1);
+
+            std::string discipline = memo.substr(0, pos1);
+            std::string mode = memo.substr(pos1 + 1, pos2 - pos1 - 1);
+            std::string server = memo.substr(pos2 + 1, pos3 - pos2 - 1);
+            int64_t rate_from = std::stoll(memo.substr(pos3 + 1, pos4 - pos3 - 1));
+            int64_t rate_to = std::stoll(memo.substr(pos4 + 1, pos5 - pos4 - 1));
+            std::string steam_id = memo.substr(pos5 + 1, pos6 - pos5 - 1);
+            uint64_t event_id = std::stoi(memo.substr(pos6 + 1, pos7 - pos6 - 1));
+
+            std::string event_name = memo.substr(pos7 + 1, pos8 - pos7 - 1);
+            bool lobby_sponsored = std::stoi(memo.substr(pos8 + 1, pos9 - pos8 - 1));
+            std::string password = memo.substr(pos9 + 1, pos10 - pos9 - 1);
+            uint64_t rate = std::stoll(memo.substr(pos10 + 1, pos11 - pos10 - 1));
+            int64_t user_commission = std::stoi(memo.substr(pos11 + 1, pos12 - pos11 - 1));
+
+            std::string owner = from.to_string() + "," + steam_id + "," + std::to_string(user_commission);
+
+            if(password != "0"){
+                std::hash<std::string> hash_fn;
+                password = std::to_string(hash_fn(password));
+            }
+
+            if (event_id == -1) {
+                eosio::check(rate_from < rate_to || rate > 0, "rate_from must be more than rate_to or rate most be positive");
+                eosio::check(rate_to == quantity.amount || rate == quantity.amount, "rate_to or rate must be equal quantity.amount");
+
+                create(from, owner, quantity, discipline, mode, server, rate_from, rate_to, rate, steam_id, password, lobby_sponsored, event_name, user_commission);
+            } else {
+                accept(event_id, steam_id, from, quantity, user_commission);
+            }
+        }
+    }
+	
+	struct [[eosio::table]] event {
+        int64_t key;
+        uint64_t expires;
+        uint64_t accept_expires;
+        uint64_t created_at;
+        uint64_t accepted_at;
+        uint64_t lobby_created;
+        std::string lobby_private;
+        bool lobby_sponsored;
+        std::string event_name;
+        std::string owner;
+        name name_owner;
+        name name_accept;
+        asset price_owner;
+        asset price_accept;
+        std::string discipline;
+        std::string mode;
+        std::string server;
+        int64_t rate;
+        int64_t rate_from;
+        int64_t rate_to;
+        int64_t rate_total;
+        std::string player1;
+        std::string player2;
+        std::string steam_id_owner;
+        std::string steam_id_accept;
+        std::string steam_id_winner;
+        uint64_t owner_commission;
+        uint64_t accept_commission;
+        uint64_t status;
+
+        uint64_t primary_key() const { return key; }
+    };
+	
+	void create(
+            name name_owner,
+            std::string owner,
+            asset price_owner,
+            std::string discipline,
+            std::string mode,
+            std::string server,
+            int64_t rate_from,
+            int64_t rate_to,
+            int64_t rate,
+            std::string steam_id,
+            std::string lobby_private,
+            bool lobby_sponsored,
+            std::string event_name,
+            uint64_t user_commission
+    ) {
+        _events.emplace(get_self(), [&](auto &new_event) {
+            new_event.key = _events.available_primary_key();
+            new_event.created_at = current_time_point().sec_since_epoch();
+            new_event.expires = current_time_point().sec_since_epoch() + EVENT_EXPIRES;
+            new_event.name_owner = name_owner;
+            new_event.owner = owner;
+            new_event.price_owner = price_owner;
+            new_event.discipline = discipline;
+            new_event.mode = mode;
+            new_event.server = server;
+            new_event.rate_from = rate_from;
+            new_event.rate_to = rate_to;
+            new_event.rate = rate;
+            new_event.player1 = lobby_sponsored ? "" : owner;
+            new_event.steam_id_owner = steam_id;
+            new_event.lobby_private = lobby_private;
+            new_event.lobby_sponsored = lobby_sponsored;
+            new_event.event_name = event_name;
+            new_event.owner_commission = user_commission;
+            new_event.status = 0;
+        });
+    }
